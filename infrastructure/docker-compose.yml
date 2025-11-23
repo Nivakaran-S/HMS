@@ -1,0 +1,276 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Databases
+  postgres-patient:
+    image: postgres:16
+    container_name: postgres-patient
+    environment:
+      POSTGRES_DB: patientdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-patient-data:/var/lib/postgresql/data
+    networks:
+      - hospital-network
+
+  postgres-doctor:
+    image: postgres:16
+    container_name: postgres-doctor
+    environment:
+      POSTGRES_DB: doctordb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-doctor-data:/var/lib/postgresql/data
+    networks:
+      - hospital-network
+
+  postgres-appointment:
+    image: postgres:16
+    container_name: postgres-appointment
+    environment:
+      POSTGRES_DB: appointmentdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-appointment-data:/var/lib/postgresql/data
+    networks:
+      - hospital-network
+
+  postgres-billing:
+    image: postgres:16
+    container_name: postgres-billing
+    environment:
+      POSTGRES_DB: billingdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-billing-data:/var/lib/postgresql/data
+    networks:
+      - hospital-network
+
+  postgres-keycloak:
+    image: postgres:16
+    container_name: postgres-keycloak
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak123
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres-keycloak-data:/var/lib/postgresql/data
+    networks:
+      - hospital-network
+
+  # Zookeeper for Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - hospital-network
+
+  # Kafka
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - hospital-network
+
+  # Keycloak
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    container_name: keycloak
+    depends_on:
+      - postgres-keycloak
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres-keycloak:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak123
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+    command: start-dev
+    ports:
+      - "8080:8080"
+    networks:
+      - hospital-network
+
+  # Eureka Server
+  eureka-server:
+    build:
+      context: ./backend/src
+      dockerfile: ServiceDiscovery/Dockerfile
+    container_name: eureka-server
+    ports:
+      - "8761:8761"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8761
+    networks:
+      - hospital-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Patient Service
+  patient-service:
+    build:
+      context: ./backend/src
+      dockerfile: PatientService/Dockerfile
+    container_name: patient-service
+    depends_on:
+      - postgres-patient
+      - kafka
+      - eureka-server
+      - keycloak
+    ports:
+      - "5001:5001"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5001
+    networks:
+      - hospital-network
+    restart: on-failure
+
+  # Doctor Service
+  doctor-service:
+    build:
+      context: ./backend/src
+      dockerfile: DoctorService/Dockerfile
+    container_name: doctor-service
+    depends_on:
+      - postgres-doctor
+      - eureka-server
+      - keycloak
+    ports:
+      - "5002:5002"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5002
+    networks:
+      - hospital-network
+    restart: on-failure
+
+  # Appointment Service
+  appointment-service:
+    build:
+      context: ./backend/src
+      dockerfile: AppointmentService/Dockerfile
+    container_name: appointment-service
+    depends_on:
+      - postgres-appointment
+      - kafka
+      - eureka-server
+      - keycloak
+    ports:
+      - "5003:5003"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5003
+    networks:
+      - hospital-network
+    restart: on-failure
+
+  # Billing Service
+  billing-service:
+    build:
+      context: ./backend/src
+      dockerfile: BillingService/Dockerfile
+    container_name: billing-service
+    depends_on:
+      - postgres-billing
+      - kafka
+      - eureka-server
+      - keycloak
+    ports:
+      - "5004:5004"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5004
+    networks:
+      - hospital-network
+    restart: on-failure
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./backend/src
+      dockerfile: ApiGateway/Dockerfile
+    container_name: api-gateway
+    depends_on:
+      - eureka-server
+      - patient-service
+      - doctor-service
+      - appointment-service
+      - billing-service
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000
+    networks:
+      - hospital-network
+    restart: on-failure
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    depends_on:
+      - api-gateway
+      - keycloak
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
+      - NEXT_PUBLIC_KEYCLOAK_URL=http://localhost:8080
+      - NEXT_PUBLIC_KEYCLOAK_REALM=hospital
+      - NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=hospital-frontend
+    networks:
+      - hospital-network
+    restart: on-failure
+
+networks:
+  hospital-network:
+    driver: bridge
+
+volumes:
+  postgres-patient-data:
+  postgres-doctor-data:
+  postgres-appointment-data:
+  postgres-billing-data:
+  postgres-keycloak-data:

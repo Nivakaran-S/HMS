@@ -1,0 +1,76 @@
+{
+  "Routes": [
+    {
+      "DownstreamPathTemplate": "/api/patients/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "patient-service",
+          "Port": 5001
+        }
+      ],
+      "UpstreamPathTemplate": "/api/patients/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "ServiceName": "patient-service",
+      "LoadBalancerOptions": {
+        "Type": "RoundRobin"
+      }
+    },
+    {
+      "DownstreamPathTemplate": "/api/doctors/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "doctor-service",
+          "Port": 5002
+        }
+      ],
+      "UpstreamPathTemplate": "/api/doctors/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "ServiceName": "doctor-service",
+      "LoadBalancerOptions": {
+        "Type": "RoundRobin"
+      }
+    },
+    {
+      "DownstreamPathTemplate": "/api/appointments/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "appointment-service",
+          "Port": 5003
+        }
+      ],
+      "UpstreamPathTemplate": "/api/appointments/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "ServiceName": "appointment-service",
+      "LoadBalancerOptions": {
+        "Type": "RoundRobin"
+      }
+    },
+    {
+      "DownstreamPathTemplate": "/api/billing/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "billing-service",
+          "Port": 5004
+        }
+      ],
+      "UpstreamPathTemplate": "/api/billing/{everything}",
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "ServiceName": "billing-service",
+      "LoadBalancerOptions": {
+        "Type": "RoundRobin"
+      }
+    }
+  ],
+  "GlobalConfiguration": {
+    "BaseUrl": "http://localhost:5000",
+    "ServiceDiscoveryProvider": {
+      "Type": "Eureka",
+      "Host": "eureka-server",
+      "Port": 8761
+    }
+  }
+}

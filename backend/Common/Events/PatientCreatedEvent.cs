@@ -1,0 +1,22 @@
+namespace Common.Events;
+
+public class PatientCreatedEvent
+{
+    public Guid PatientId { get; set; }
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public DateTime DateOfBirth { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class PatientUpdatedEvent
+{
+    public Guid PatientId { get; set; }
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public DateTime UpdatedAt { get; set; }
+}
