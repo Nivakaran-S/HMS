@@ -3,26 +3,31 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using DoctorService.Data;
 using DoctorService.Services;
+using DoctorService.Kafka; // Ensure this namespace exists or create the file (see below)
 using Steeltoe.Discovery.Client;
+using Common.Extensions; // Requires reference to Common project
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Database Configuration
+// Database
 builder.Services.AddDbContext<DoctorDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DoctorDb")));
 
-// Service Discovery (Eureka)
+// FIXED: Register Kafka Producer
+builder.Services.AddKafkaProducer(builder.Configuration);
+builder.Services.AddScoped<IKafkaProducerService, KafkaProducerService>();
+
+// Service Discovery
 builder.Services.AddDiscoveryClient(builder.Configuration);
 
-// Business Services
+// Services
 builder.Services.AddScoped<IDoctorService, DoctorServiceImpl>();
 
-// Keycloak Authentication
+// Auth
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -39,28 +44,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
-
-// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
+        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
     });
 });
 
 var app = builder.Build();
 
-// Apply migrations automatically
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<DoctorDbContext>();
     dbContext.Database.Migrate();
 }
 
-// Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

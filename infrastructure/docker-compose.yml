@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Databases
+  # --- Databases ---
   postgres-patient:
     image: postgres:16
     container_name: postgres-patient
@@ -72,7 +72,7 @@ services:
     networks:
       - hospital-network
 
-  # Zookeeper for Kafka
+  # --- Messaging ---
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper
@@ -84,7 +84,6 @@ services:
     networks:
       - hospital-network
 
-  # Kafka
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: kafka
@@ -104,7 +103,7 @@ services:
     networks:
       - hospital-network
 
-  # Keycloak
+  # --- Auth & Discovery ---
   keycloak:
     image: quay.io/keycloak/keycloak:23.0
     container_name: keycloak
@@ -125,26 +124,16 @@ services:
     networks:
       - hospital-network
 
-  # Eureka Server
+  # FIXED: Use official Eureka image instead of building .NET project
   eureka-server:
-    build:
-      context: ./backend/src
-      dockerfile: ServiceDiscovery/Dockerfile
+    image: steeltoeoss/eureka-server
     container_name: eureka-server
     ports:
       - "8761:8761"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:8761
     networks:
       - hospital-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8761"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
-  # Patient Service
+  # --- Microservices ---
   patient-service:
     build:
       context: ./backend/src
@@ -154,17 +143,16 @@ services:
       - postgres-patient
       - kafka
       - eureka-server
-      - keycloak
     ports:
       - "5001:5001"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5001
+      - Kafka__BootstrapServers=kafka:9092
+      - Eureka__Client__ServiceUrl=http://eureka-server:8761/eureka/
     networks:
       - hospital-network
-    restart: on-failure
 
-  # Doctor Service
   doctor-service:
     build:
       context: ./backend/src
@@ -172,18 +160,18 @@ services:
     container_name: doctor-service
     depends_on:
       - postgres-doctor
+      - kafka
       - eureka-server
-      - keycloak
     ports:
       - "5002:5002"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5002
+      - Kafka__BootstrapServers=kafka:9092
+      - Eureka__Client__ServiceUrl=http://eureka-server:8761/eureka/
     networks:
       - hospital-network
-    restart: on-failure
 
-  # Appointment Service
   appointment-service:
     build:
       context: ./backend/src
@@ -193,17 +181,16 @@ services:
       - postgres-appointment
       - kafka
       - eureka-server
-      - keycloak
     ports:
       - "5003:5003"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5003
+      - Kafka__BootstrapServers=kafka:9092
+      - Eureka__Client__ServiceUrl=http://eureka-server:8761/eureka/
     networks:
       - hospital-network
-    restart: on-failure
 
-  # Billing Service
   billing-service:
     build:
       context: ./backend/src
@@ -213,17 +200,16 @@ services:
       - postgres-billing
       - kafka
       - eureka-server
-      - keycloak
     ports:
       - "5004:5004"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5004
+      - Kafka__BootstrapServers=kafka:9092
+      - Eureka__Client__ServiceUrl=http://eureka-server:8761/eureka/
     networks:
       - hospital-network
-    restart: on-failure
 
-  # API Gateway
   api-gateway:
     build:
       context: ./backend/src
@@ -233,18 +219,16 @@ services:
       - eureka-server
       - patient-service
       - doctor-service
-      - appointment-service
-      - billing-service
     ports:
       - "5000:5000"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5000
+      - Eureka__Client__ServiceUrl=http://eureka-server:8761/eureka/
     networks:
       - hospital-network
-    restart: on-failure
 
-  # Frontend
+  # --- Frontend ---
   frontend:
     build:
       context: ./frontend
@@ -252,7 +236,6 @@ services:
     container_name: frontend
     depends_on:
       - api-gateway
-      - keycloak
     ports:
       - "3000:3000"
     environment:
@@ -262,7 +245,6 @@ services:
       - NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=hospital-frontend
     networks:
       - hospital-network
-    restart: on-failure
 
 networks:
   hospital-network:
