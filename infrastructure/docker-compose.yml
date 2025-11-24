@@ -136,7 +136,7 @@ services:
   # --- Microservices ---
   patient-service:
     build:
-      context: ./backend/src
+      context: ../backend/src
       dockerfile: PatientService/Dockerfile
     container_name: patient-service
     depends_on:
@@ -155,7 +155,7 @@ services:
 
   doctor-service:
     build:
-      context: ./backend/src
+      context: ../backend/src
       dockerfile: DoctorService/Dockerfile
     container_name: doctor-service
     depends_on:
@@ -174,7 +174,7 @@ services:
 
   appointment-service:
     build:
-      context: ./backend/src
+      context: ../backend/src
       dockerfile: AppointmentService/Dockerfile
     container_name: appointment-service
     depends_on:
@@ -193,7 +193,7 @@ services:
 
   billing-service:
     build:
-      context: ./backend/src
+      context: ../backend/src
       dockerfile: BillingService/Dockerfile
     container_name: billing-service
     depends_on:
@@ -212,7 +212,7 @@ services:
 
   api-gateway:
     build:
-      context: ./backend/src
+      context: ../backend/src
       dockerfile: ApiGateway/Dockerfile
     container_name: api-gateway
     depends_on:
@@ -231,7 +231,7 @@ services:
   # --- Frontend ---
   frontend:
     build:
-      context: ./frontend
+      context: ../frontend
       dockerfile: Dockerfile
     container_name: frontend
     depends_on:
