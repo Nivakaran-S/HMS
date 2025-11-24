@@ -15,6 +15,11 @@ services:
       - postgres-patient-data:/var/lib/postgresql/data
     networks:
       - hospital-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres-doctor:
     image: postgres:16
@@ -29,6 +34,11 @@ services:
       - postgres-doctor-data:/var/lib/postgresql/data
     networks:
       - hospital-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres-appointment:
     image: postgres:16
@@ -43,6 +53,11 @@ services:
       - postgres-appointment-data:/var/lib/postgresql/data
     networks:
       - hospital-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres-billing:
     image: postgres:16
@@ -57,6 +72,11 @@ services:
       - postgres-billing-data:/var/lib/postgresql/data
     networks:
       - hospital-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres-keycloak:
     image: postgres:16
@@ -71,6 +91,11 @@ services:
       - postgres-keycloak-data:/var/lib/postgresql/data
     networks:
       - hospital-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # --- Messaging ---
   zookeeper:
@@ -102,13 +127,19 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     networks:
       - hospital-network
+    healthcheck:
+      test: nc -z localhost 9092 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # --- Auth & Discovery ---
   keycloak:
     image: quay.io/keycloak/keycloak:23.0
     container_name: keycloak
     depends_on:
-      - postgres-keycloak
+      postgres-keycloak:
+        condition: service_healthy
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres-keycloak:5432/keycloak
@@ -124,7 +155,6 @@ services:
     networks:
       - hospital-network
 
-  # FIXED: Use official Eureka image instead of building .NET project
   eureka-server:
     image: steeltoeoss/eureka-server
     container_name: eureka-server
@@ -132,6 +162,11 @@ services:
       - "8761:8761"
     networks:
       - hospital-network
+    healthcheck:
+      test: curl -f http://localhost:8761/ || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   # --- Microservices ---
   patient-service:
@@ -140,9 +175,12 @@ services:
       dockerfile: PatientService/Dockerfile
     container_name: patient-service
     depends_on:
-      - postgres-patient
-      - kafka
-      - eureka-server
+      postgres-patient:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
     ports:
       - "5001:5001"
     environment:
@@ -159,9 +197,12 @@ services:
       dockerfile: DoctorService/Dockerfile
     container_name: doctor-service
     depends_on:
-      - postgres-doctor
-      - kafka
-      - eureka-server
+      postgres-doctor:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
     ports:
       - "5002:5002"
     environment:
@@ -178,9 +219,12 @@ services:
       dockerfile: AppointmentService/Dockerfile
     container_name: appointment-service
     depends_on:
-      - postgres-appointment
-      - kafka
-      - eureka-server
+      postgres-appointment:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
     ports:
       - "5003:5003"
     environment:
@@ -197,9 +241,12 @@ services:
       dockerfile: BillingService/Dockerfile
     container_name: billing-service
     depends_on:
-      - postgres-billing
-      - kafka
-      - eureka-server
+      postgres-billing:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
     ports:
       - "5004:5004"
     environment:
@@ -216,9 +263,12 @@ services:
       dockerfile: ApiGateway/Dockerfile
     container_name: api-gateway
     depends_on:
-      - eureka-server
-      - patient-service
-      - doctor-service
+      eureka-server:
+        condition: service_healthy
+      patient-service:
+        condition: service_started
+      doctor-service:
+        condition: service_started
     ports:
       - "5000:5000"
     environment:

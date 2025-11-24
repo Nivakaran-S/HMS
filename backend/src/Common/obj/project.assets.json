@@ -2046,11 +2046,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\LENOVO\\Desktop\\hms\\backend\\Common\\Common.csproj",
+      "projectUniqueName": "C:\\Users\\LENOVO\\Desktop\\hms\\backend\\src\\Common\\Common.csproj",
       "projectName": "Common",
-      "projectPath": "C:\\Users\\LENOVO\\Desktop\\hms\\backend\\Common\\Common.csproj",
+      "projectPath": "C:\\Users\\LENOVO\\Desktop\\hms\\backend\\src\\Common\\Common.csproj",
       "packagesPath": "C:\\Users\\LENOVO\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\LENOVO\\Desktop\\hms\\backend\\Common\\obj\\",
+      "outputPath": "C:\\Users\\LENOVO\\Desktop\\hms\\backend\\src\\Common\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\LENOVO\\AppData\\Roaming\\NuGet\\NuGet.Config",
