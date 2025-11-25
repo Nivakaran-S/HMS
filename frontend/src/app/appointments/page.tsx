@@ -1,60 +1,248 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { useAuth } from '@/components/AuthProvider';
-import { createApiClient } from '@/services/api';
+
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'react-toastify';
+import Header from '@/components/Header';
+import AppointmentCard from '@/components/AppointmentCard';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import { useApi } from '@/hooks/useApi';
+import { Appointment, Doctor, Patient } from '@/types';
+
+const defaultAppointment: Appointment = {
+  patientId: '',
+  doctorId: '',
+  appointmentDateTime: '',
+  reason: '',
+  status: 'Scheduled',
+  notes: '',
+  durationMinutes: 30,
+};
 
 export default function AppointmentsPage() {
-  const { token } = useAuth();
-  const [appointments, setAppointments] = useState<any[]>([]);
+  const api = useApi();
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<Appointment>(defaultAppointment);
+  const [statusFilter, setStatusFilter] = useState('All');
 
   useEffect(() => {
-    if (token) {
-      // Fetch all appointments (in a real app, filter by user role)
-      createApiClient(token).get('/api/appointments')
-        .then(res => setAppointments(res.data))
-        .catch(err => console.error(err))
-        .finally(() => setLoading(false));
-    }
-  }, [token]);
+    if (!api) return;
 
-  if (loading) return <div className="p-6 text-black">Loading appointments...</div>;
+    const fetchData = async () => {
+      try {
+        const [appointmentsRes, patientsRes, doctorsRes] = await Promise.all([
+          api.get('/api/appointments'),
+          api.get('/api/patients'),
+          api.get('/api/doctors'),
+        ]);
+
+        setAppointments(appointmentsRes.data);
+        setPatients(patientsRes.data);
+        setDoctors(doctorsRes.data);
+      } catch (error) {
+        console.error('Failed to load appointments', error);
+        toast.error('Failed to load appointments');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [api]);
+
+  const filteredAppointments = useMemo(() => {
+    if (statusFilter === 'All') return appointments;
+    return appointments.filter((appt) => appt.status === statusFilter);
+  }, [appointments, statusFilter]);
+
+  const refreshAppointments = async () => {
+    if (!api) return;
+    const refreshed = await api.get('/api/appointments');
+    setAppointments(refreshed.data);
+  };
+
+  const handleSubmit = async () => {
+    if (!api) return;
+
+    try {
+      await api.post('/api/appointments', form);
+      toast.success('Appointment created');
+      setForm(defaultAppointment);
+      setShowForm(false);
+      await refreshAppointments();
+    } catch (error) {
+      console.error('Failed to create appointment', error);
+      toast.error('Failed to create appointment');
+    }
+  };
+
+  const handleComplete = async (appointmentId: string, fee = 100) => {
+    if (!api) return;
+    try {
+      await api.post(`/api/appointments/${appointmentId}/complete`, {
+        notes: 'Completed via dashboard',
+        consultationFee: fee,
+      });
+      toast.success('Appointment marked as completed');
+      await refreshAppointments();
+    } catch (error) {
+      console.error('Unable to complete appointment', error);
+      toast.error('Unable to complete appointment');
+    }
+  };
+
+  const handleCancel = async (appointmentId: string) => {
+    if (!api) return;
+
+    try {
+      await api.post(`/api/appointments/${appointmentId}/cancel`, {
+        reason: 'Cancelled by staff',
+      });
+      toast.success('Appointment cancelled');
+      await refreshAppointments();
+    } catch (error) {
+      console.error('Unable to cancel appointment', error);
+      toast.error('Unable to cancel appointment');
+    }
+  };
+
+  const getPatientName = (patientId: string) => {
+    const patient = patients.find((p) => p.id === patientId);
+    return patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown patient';
+  };
+
+  const getDoctorName = (doctorId: string) => {
+    const doctor = doctors.find((d) => d.id === doctorId);
+    return doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : 'Unknown doctor';
+  };
+
+  if (loading || !api) {
+    return <div className="card">Loading appointments...</div>;
+  }
 
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Appointments</h1>
-      <div className="bg-white shadow-md rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {appointments.map((app) => (
-              <tr key={app.id}>
-                <td className="px-6 py-4 text-gray-900">
-                  {new Date(app.appointmentDateTime).toLocaleString()}
-                </td>
-                <td className="px-6 py-4 text-gray-600">{app.reason}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                    ${app.status === 'Scheduled' ? 'bg-blue-100 text-blue-800' : 
-                      app.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                    {app.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500">
-                  <button className="text-indigo-600 hover:text-indigo-900">Edit</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <ProtectedRoute roles={['admin', 'reception']}>
+      <Header
+        title="Appointments"
+        description="Schedule and track upcoming visits."
+        actions={
+          <button className="btn btn-primary" onClick={() => setShowForm((prev) => !prev)}>
+            {showForm ? 'Close Form' : 'Book Appointment'}
+          </button>
+        }
+      />
+
+      {showForm && (
+        <div className="card mb-6">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleSubmit();
+            }}
+            className="grid grid-cols-1 gap-4 md:grid-cols-2"
+          >
+            <div>
+              <label className="label">Patient</label>
+              <select
+                className="input"
+                required
+                value={form.patientId}
+                onChange={(event) => setForm({ ...form, patientId: event.target.value })}
+              >
+                <option value="">Select patient</option>
+                {patients.map((patient) => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.firstName} {patient.lastName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Doctor</label>
+              <select
+                className="input"
+                required
+                value={form.doctorId}
+                onChange={(event) => setForm({ ...form, doctorId: event.target.value })}
+              >
+                <option value="">Select doctor</option>
+                {doctors
+                  .filter((doctor) => doctor.isAvailable)
+                  .map((doctor) => (
+                    <option key={doctor.id} value={doctor.id}>
+                      Dr. {doctor.firstName} {doctor.lastName} — {doctor.specialization}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Date &amp; Time</label>
+              <input
+                className="input"
+                type="datetime-local"
+                required
+                value={form.appointmentDateTime}
+                onChange={(event) => setForm({ ...form, appointmentDateTime: event.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Duration (minutes)</label>
+              <input
+                className="input"
+                type="number"
+                min={15}
+                value={form.durationMinutes}
+                onChange={(event) => setForm({ ...form, durationMinutes: Number(event.target.value) })}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="label">Reason</label>
+              <textarea
+                className="input"
+                rows={3}
+                value={form.reason}
+                onChange={(event) => setForm({ ...form, reason: event.target.value })}
+                required
+              />
+            </div>
+            <div className="md:col-span-2">
+              <button className="btn btn-primary w-full" type="submit">
+                Submit
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="card mb-4 flex flex-wrap gap-4 items-center">
+        {['All', 'Scheduled', 'Completed', 'Cancelled'].map((status) => (
+          <button
+            key={status}
+            className={`rounded-full px-4 py-1 text-sm ${
+              statusFilter === status ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
+            }`}
+            onClick={() => setStatusFilter(status)}
+          >
+            {status}
+          </button>
+        ))}
       </div>
-    </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {filteredAppointments.map((appointment) => (
+          <AppointmentCard
+            key={appointment.id}
+            appointment={appointment}
+            patientName={getPatientName(appointment.patientId)}
+            doctorName={getDoctorName(appointment.doctorId)}
+            onComplete={(id) => handleComplete(id)}
+            onCancel={(id) => handleCancel(id)}
+          />
+        ))}
+      </div>
+    </ProtectedRoute>
   );
 }

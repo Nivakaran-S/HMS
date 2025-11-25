@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-config
+  namespace: hospital
+data:
+  KC_PROXY: edge
+  KC_HTTP_ENABLED: "true"
+  KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
+

@@ -1,0 +1,65 @@
+{
+  "realm": "hospital",
+  "enabled": true,
+  "displayName": "Hospital Management Realm",
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Full platform administrator",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "doctor",
+        "description": "Doctor level access",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "billing",
+        "description": "Billing operations team",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "reception",
+        "description": "Front desk staff",
+        "composite": false,
+        "clientRole": false
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "hospital-frontend",
+      "name": "Hospital Frontend",
+      "rootUrl": "http://localhost:3000",
+      "baseUrl": "/",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "redirectUris": [
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:3000/*"
+      }
+    },
+    {
+      "clientId": "hospital-api",
+      "name": "Hospital API",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "secret": "hospital-api-secret"
+    }
+  ],
+  "groups": [],
+  "users": []
+}
+

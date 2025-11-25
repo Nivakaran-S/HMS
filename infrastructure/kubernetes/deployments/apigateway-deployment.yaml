@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: hospital
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: hospital/api-gateway:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:5000
+            - name: Keycloak__Authority
+              value: http://keycloak:8080/realms/hospital
+            - name: Keycloak__Audience
+              value: hospital-api
+          ports:
+            - containerPort: 5000
+          readinessProbe:
+            httpGet:
+              path: /api/api-gateway/health/live
+              port: 5000
+            initialDelaySeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/api-gateway/health/live
+              port: 5000
+            initialDelaySeconds: 20
+

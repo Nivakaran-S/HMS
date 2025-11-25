@@ -7,7 +7,7 @@ namespace AppointmentService.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "admin,reception")]
 public class AppointmentsController : ControllerBase
 {
     private readonly IAppointmentService _appointmentService;

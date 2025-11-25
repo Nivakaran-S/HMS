@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-service
+  namespace: hospital
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: billing-service
+  template:
+    metadata:
+      labels:
+        app: billing-service
+    spec:
+      containers:
+        - name: billing-service
+          image: hospital/billing-service:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ASPNETCORE_URLS
+              value: http://+:5004
+            - name: ConnectionStrings__DefaultConnection
+              value: Host=postgres-billing;Port=5432;Database=billingdb;Username=postgres;Password=postgres123
+            - name: Kafka__BootstrapServers
+              value: kafka:9092
+            - name: Eureka__Client__ServiceUrl
+              value: http://eureka-service:8761/eureka/
+            - name: Keycloak__Authority
+              value: http://keycloak:8080/realms/hospital
+            - name: Keycloak__Audience
+              value: hospital-api
+          ports:
+            - containerPort: 5004
+          readinessProbe:
+            httpGet:
+              path: /api/billing/health
+              port: 5004
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/billing/health
+              port: 5004
+            initialDelaySeconds: 30
+            periodSeconds: 20
+

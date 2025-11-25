@@ -9,7 +9,8 @@ public class AppointmentDbContext : DbContext
     {
     }
 
-    public DbSet<Appointment> Appointments { get; set; }
+    public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -22,6 +23,14 @@ public class AppointmentDbContext : DbContext
             entity.HasIndex(e => e.DoctorId);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+        });
+
+        modelBuilder.Entity<OutboxMessage>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Topic).IsRequired();
+            entity.Property(e => e.Payload).IsRequired();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
     }
 }

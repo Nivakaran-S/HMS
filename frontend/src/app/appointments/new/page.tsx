@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { createApiClient } from '@/services/api';
+import { Patient, Doctor } from '@/types';
 
 export default function BookAppointmentPage() {
   const { token } = useAuth();
@@ -11,8 +12,8 @@ export default function BookAppointmentPage() {
   
   // In a real app, you'd search/select patient & doctor. 
   // For MVP, we'll enter IDs manually or fetch lists.
-  const [patients, setPatients] = useState<any[]>([]);
-  const [doctors, setDoctors] = useState<any[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   
   const [formData, setFormData] = useState({
     patientId: '',
@@ -37,6 +38,7 @@ export default function BookAppointmentPage() {
       alert('Appointment booked!');
       router.push('/appointments');
     } catch (error) {
+      console.error('Failed to book appointment', error);
       alert('Failed to book appointment');
     }
   };

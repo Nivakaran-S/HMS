@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # --- Databases ---
   postgres-patient:
@@ -20,6 +18,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   postgres-doctor:
     image: postgres:16
@@ -39,6 +38,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   postgres-appointment:
     image: postgres:16
@@ -58,6 +58,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   postgres-billing:
     image: postgres:16
@@ -77,6 +78,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   postgres-keycloak:
     image: postgres:16
@@ -96,6 +98,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   # --- Messaging ---
   zookeeper:
@@ -108,12 +111,20 @@ services:
       - "2181:2181"
     networks:
       - hospital-network
+    healthcheck:
+      test: echo srvr | nc localhost 2181 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: kafka
+    restart: on-failure # Auto-restart if it crashes
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     ports:
       - "9092:9092"
       - "29092:29092"
@@ -130,8 +141,9 @@ services:
     healthcheck:
       test: nc -z localhost 9092 || exit 1
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 12       # Very tolerant
+      start_period: 120s # Give it 2 MINUTES to start
 
   # --- Auth & Discovery ---
   keycloak:
@@ -154,6 +166,12 @@ services:
       - "8080:8080"
     networks:
       - hospital-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
   eureka-server:
     image: steeltoeoss/eureka-server
@@ -166,9 +184,13 @@ services:
       test: curl -f http://localhost:8761/ || exit 1
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 120s # Give it 2 MINUTES to start
 
   # --- Microservices ---
+  # Using "service_healthy" ensures apps wait for infrastructure
+  # But because we increased start_period above, Docker won't timeout and kill them.
+  
   patient-service:
     build:
       context: ../backend/src
@@ -186,6 +208,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5001
+      - ConnectionStrings__DefaultConnection=Host=postgres-patient;Port=5432;Database=patientdb;Username=postgres;Password=postgres123
       - Kafka__BootstrapServers=kafka:9092
       - Eureka__Client__ServiceUrl=http://eureka-server:8761/eureka/
     networks:
@@ -208,6 +231,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5002
+      - ConnectionStrings__DefaultConnection=Host=postgres-doctor;Port=5432;Database=doctordb;Username=postgres;Password=postgres123
       - Kafka__BootstrapServers=kafka:9092
       - Eureka__Client__ServiceUrl=http://eureka-server:8761/eureka/
     networks:
@@ -230,6 +254,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5003
+      - ConnectionStrings__DefaultConnection=Host=postgres-appointment;Port=5432;Database=appointmentdb;Username=postgres;Password=postgres123
       - Kafka__BootstrapServers=kafka:9092
       - Eureka__Client__ServiceUrl=http://eureka-server:8761/eureka/
     networks:
@@ -252,6 +277,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5004
+      - ConnectionStrings__DefaultConnection=Host=postgres-billing;Port=5432;Database=billingdb;Username=postgres;Password=postgres123
       - Kafka__BootstrapServers=kafka:9092
       - Eureka__Client__ServiceUrl=http://eureka-server:8761/eureka/
     networks:

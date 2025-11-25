@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using AppointmentService.Data;
 using AppointmentService.Models;
 using AppointmentService.Kafka;
@@ -67,10 +68,7 @@ public class AppointmentServiceImpl : IAppointmentService
         };
 
         _context.Appointments.Add(appointment);
-        await _context.SaveChangesAsync();
-
-        // Publish event to Kafka
-        var appointmentEvent = new AppointmentCreatedEvent
+        QueueOutboxMessage("appointment-created", new AppointmentCreatedEvent
         {
             AppointmentId = appointment.Id,
             PatientId = appointment.PatientId,
@@ -79,10 +77,10 @@ public class AppointmentServiceImpl : IAppointmentService
             Reason = appointment.Reason,
             Status = appointment.Status,
             CreatedAt = appointment.CreatedAt
-        };
+        });
 
-        await _kafkaProducer.PublishAsync("appointment-created", appointmentEvent);
-        _logger.LogInformation($"Appointment created with ID: {appointment.Id}");
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Appointment created with ID {AppointmentId}", appointment.Id);
 
         return appointment;
     }
@@ -146,10 +144,9 @@ public class AppointmentServiceImpl : IAppointmentService
         appointment.Status = "Completed";
         appointment.Notes = notes;
         appointment.UpdatedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
+        appointment.BillingStatus = "Invoiced";
 
-        // Publish event to Kafka for Billing Service
-        var completedEvent = new AppointmentCompletedEvent
+        QueueOutboxMessage("appointment-completed", new AppointmentCompletedEvent
         {
             AppointmentId = appointment.Id,
             PatientId = appointment.PatientId,
@@ -157,10 +154,10 @@ public class AppointmentServiceImpl : IAppointmentService
             CompletedAt = DateTime.UtcNow,
             Notes = notes,
             ConsultationFee = consultationFee
-        };
+        });
 
-        await _kafkaProducer.PublishAsync("appointment-completed", completedEvent);
-        _logger.LogInformation($"Appointment completed with ID: {appointment.Id}");
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Appointment completed with ID {AppointmentId}", appointment.Id);
 
         return appointment;
     }
@@ -174,19 +171,31 @@ public class AppointmentServiceImpl : IAppointmentService
         appointment.Status = "Cancelled";
         appointment.Notes = $"Cancelled: {reason}";
         appointment.UpdatedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
+        appointment.BillingStatus = "Cancelled";
 
-        var cancelledEvent = new AppointmentCancelledEvent
+        QueueOutboxMessage("appointment-cancelled", new AppointmentCancelledEvent
         {
             AppointmentId = appointment.Id,
             PatientId = appointment.PatientId,
             Reason = reason,
             CancelledAt = DateTime.UtcNow
-        };
+        });
 
-        await _kafkaProducer.PublishAsync("appointment-cancelled", cancelledEvent);
-        _logger.LogInformation($"Appointment cancelled with ID: {appointment.Id}");
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Appointment cancelled with ID {AppointmentId}", appointment.Id);
 
         return appointment;
+    }
+
+    private void QueueOutboxMessage(string topic, object payload)
+    {
+        var message = new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            Topic = topic,
+            Payload = JsonSerializer.Serialize(payload)
+        };
+
+        _context.OutboxMessages.Add(message);
     }
 }

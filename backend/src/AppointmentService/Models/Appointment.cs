@@ -24,6 +24,9 @@ public class Appointment
     
     [MaxLength(1000)]
     public string Notes { get; set; } = string.Empty;
+
+    [MaxLength(30)]
+    public string BillingStatus { get; set; } = "Pending"; // Pending, Invoiced, Paid
     
     public int DurationMinutes { get; set; } = 30;
     

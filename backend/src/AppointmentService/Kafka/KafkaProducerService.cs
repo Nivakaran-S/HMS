@@ -6,6 +6,7 @@ namespace AppointmentService.Kafka;
 public interface IKafkaProducerService
 {
     Task PublishAsync<T>(string topic, T message);
+    Task PublishRawAsync(string topic, string payload);
 }
 
 public class KafkaProducerService : IKafkaProducerService
@@ -24,10 +25,15 @@ public class KafkaProducerService : IKafkaProducerService
     public async Task PublishAsync<T>(string topic, T message)
     {
         var serializedMessage = JsonSerializer.Serialize(message);
+        await PublishRawAsync(topic, serializedMessage);
+    }
+
+    public async Task PublishRawAsync(string topic, string payload)
+    {
         var kafkaMessage = new Message<string, string>
         {
             Key = Guid.NewGuid().ToString(),
-            Value = serializedMessage
+            Value = payload
         };
 
         await _producer.ProduceAsync(topic, kafkaMessage);

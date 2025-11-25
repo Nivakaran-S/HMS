@@ -7,7 +7,7 @@ namespace BillingService.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Policy = "RequireBillingTeam")]
 public class BillingController : ControllerBase
 {
     private readonly IBillingService _billingService;

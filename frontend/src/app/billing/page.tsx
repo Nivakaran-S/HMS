@@ -1,44 +1,116 @@
 'use client';
+
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/components/AuthProvider';
-import { createApiClient } from '@/services/api';
+import { format } from 'date-fns';
+import { toast } from 'react-toastify';
+import Header from '@/components/Header';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import { useApi } from '@/hooks/useApi';
+import { Bill } from '@/types';
 
 export default function BillingPage() {
-  const { token } = useAuth();
-  const [bills, setBills] = useState<any[]>([]);
+  const api = useApi();
+  const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (token) {
-      createApiClient(token).get('/api/billing')
-        .then(res => setBills(res.data))
-        .catch(err => console.error(err))
-        .finally(() => setLoading(false));
-    }
-  }, [token]);
+    if (!api) return;
 
-  if (loading) return <div className="p-6 text-black">Loading billing info...</div>;
+    const fetchBills = async () => {
+      try {
+        const response = await api.get('/api/billing');
+        setBills(response.data);
+      } catch (error) {
+        console.error('Failed to fetch bills', error);
+        toast.error('Failed to fetch bills');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBills();
+  }, [api]);
+
+  const handlePayment = async (billId?: string) => {
+    if (!api || !billId) return;
+
+    try {
+      await api.post(`/api/billing/${billId}/payment`, {
+        paymentMethod: 'Credit Card',
+        transactionId: `TXN${Date.now()}`,
+        paymentDate: new Date().toISOString(),
+      });
+      toast.success('Payment processed successfully');
+      const refreshed = await api.get('/api/billing');
+      setBills(refreshed.data);
+    } catch (error) {
+      console.error('Failed to process payment', error);
+      toast.error('Failed to process payment');
+    }
+  };
+
+  if (loading || !api) {
+    return <div className="card">Loading billing data...</div>;
+  }
 
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Invoices & Billing</h1>
-      <div className="grid gap-4">
-        {bills.map((bill) => (
-          <div key={bill.id} className="bg-white p-6 rounded-lg shadow flex justify-between items-center">
-            <div>
-              <p className="text-sm text-gray-500">Invoice #{bill.id.substring(0, 8)}</p>
-              <p className="text-lg font-bold text-gray-800">${bill.totalAmount.toFixed(2)}</p>
-              <p className="text-sm text-gray-600">Date: {new Date(bill.billDate).toLocaleDateString()}</p>
-            </div>
-            <div>
-              <span className={`px-3 py-1 rounded-full text-sm font-medium 
-                ${bill.paymentStatus === 'Paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                {bill.paymentStatus}
-              </span>
-            </div>
-          </div>
-        ))}
+    <ProtectedRoute roles={['admin', 'billing']}>
+      <Header title="Billing" description="Track outstanding and completed invoices." />
+
+      <div className="card overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">Bill Date</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">Consultation Fee</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">Total</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">Tax</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">Net Amount</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase text-gray-500">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-100">
+            {bills.map((bill) => (
+              <tr key={bill.id}>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                  {format(new Date(bill.billDate), 'PP')}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                  ${bill.consultationFee.toFixed(2)}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${bill.totalAmount.toFixed(2)}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${bill.taxAmount.toFixed(2)}</td>
+                <td className="px-6 py-4 whitespace-nowrap font-semibold text-gray-900">${bill.netAmount.toFixed(2)}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      bill.paymentStatus === 'Paid'
+                        ? 'bg-green-100 text-green-800'
+                        : bill.paymentStatus === 'Cancelled'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                    }`}
+                  >
+                    {bill.paymentStatus}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {bill.paymentStatus === 'Pending' ? (
+                    <button className="btn btn-success btn-sm" onClick={() => handlePayment(bill.id)}>
+                      Pay Now
+                    </button>
+                  ) : (
+                    bill.paymentDate && (
+                      <span className="text-xs text-gray-500">Paid on {format(new Date(bill.paymentDate), 'PP')}</span>
+                    )
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-    </div>
+    </ProtectedRoute>
   );
 }

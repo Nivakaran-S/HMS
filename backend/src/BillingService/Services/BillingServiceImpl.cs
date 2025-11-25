@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using BillingService.Data;
 using BillingService.Models;
+using BillingService.Kafka;
+using Common.Events;
 
 namespace BillingService.Services;
 
@@ -19,14 +21,17 @@ public interface IBillingService
 public class BillingServiceImpl : IBillingService
 {
     private readonly BillingDbContext _context;
+    private readonly IKafkaProducerService _kafkaProducer;
     private readonly ILogger<BillingServiceImpl> _logger;
     private const decimal TAX_RATE = 0.10m; // 10% tax
 
     public BillingServiceImpl(
         BillingDbContext context,
+        IKafkaProducerService kafkaProducer,
         ILogger<BillingServiceImpl> logger)
     {
         _context = context;
+        _kafkaProducer = kafkaProducer;
         _logger = logger;
     }
 
@@ -143,7 +148,19 @@ public class BillingServiceImpl : IBillingService
         bill.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
-        _logger.LogInformation($"Payment processed for bill {billId}");
+        _logger.LogInformation("Payment processed for bill {BillId}", billId);
+
+        var paymentEvent = new BillPaymentProcessedEvent
+        {
+            BillId = bill.Id,
+            AppointmentId = bill.AppointmentId,
+            PatientId = bill.PatientId,
+            NetAmount = bill.NetAmount,
+            PaymentStatus = bill.PaymentStatus,
+            PaymentDate = bill.PaymentDate ?? DateTime.UtcNow
+        };
+
+        await _kafkaProducer.PublishAsync("billing-payment-processed", paymentEvent);
 
         return bill;
     }

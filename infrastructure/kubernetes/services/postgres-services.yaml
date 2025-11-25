@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-patient
+  namespace: hospital
+spec:
+  selector:
+    app: postgres-patient
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-doctor
+  namespace: hospital
+spec:
+  selector:
+    app: postgres-doctor
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-appointment
+  namespace: hospital
+spec:
+  selector:
+    app: postgres-appointment
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-billing
+  namespace: hospital
+spec:
+  selector:
+    app: postgres-billing
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-keycloak
+  namespace: hospital
+spec:
+  selector:
+    app: postgres-keycloak
+  ports:
+    - port: 5432
+      targetPort: 5432
+

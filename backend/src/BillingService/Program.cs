@@ -1,36 +1,71 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
+using System.Reflection;
 using BillingService.Data;
-using BillingService.Services;
 using BillingService.Kafka;
-using Steeltoe.Discovery.Client;
+using BillingService.Services;
 using Common.Extensions;
+using FluentValidation;
+using FluentValidation.AspNetCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Instrumentation.Runtime;
+using Serilog;
+
+const string serviceName = "billing-service";
+const string apiVersion = "v1";
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container
-builder.Services.AddControllers();
+builder.Host.UseSerilog((context, services, configuration) =>
+{
+    configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .Enrich.WithProperty("service", serviceName)
+        .Enrich.FromLogContext()
+        .WriteTo.Console();
+});
+
+builder.Services.AddProblemDetails();
+
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var problemDetails = new ValidationProblemDetails(context.ModelState)
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "Validation failed",
+                Type = "https://httpstatuses.com/422"
+            };
+
+            return new UnprocessableEntityObjectResult(problemDetails);
+        };
+    });
+
+builder.Services.AddFluentValidationAutoValidation()
+    .AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Database Configuration
 builder.Services.AddDbContext<BillingDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("BillingDb")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Kafka Configuration
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<BillingDbContext>("billing-db");
+
+builder.Services.AddKafkaProducer(builder.Configuration);
 builder.Services.AddKafkaConsumer(builder.Configuration, "billing-service-group");
-
-// Service Discovery (Eureka)
-builder.Services.AddDiscoveryClient(builder.Configuration);
-
-// Business Services
+builder.Services.AddScoped<IKafkaProducerService, KafkaProducerService>();
 builder.Services.AddScoped<IBillingService, BillingServiceImpl>();
-
-// Background Services
 builder.Services.AddHostedService<KafkaConsumerService>();
+builder.Services.AddEurekaRegistration(builder.Configuration, serviceName);
 
-// Keycloak Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -42,42 +77,90 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
-            ValidateIssuerSigningKey = true
+            ValidateIssuerSigningKey = true,
+            NameClaimType = "preferred_username",
+            RoleClaimType = "roles"
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireBillingTeam", policy =>
+        policy.RequireRole("billing", "admin"));
+});
 
-// CORS
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService(serviceName, serviceVersion: apiVersion))
+    .WithMetrics(metrics =>
+    {
+        metrics.AddAspNetCoreInstrumentation();
+        metrics.AddHttpClientInstrumentation();
+        metrics.AddRuntimeInstrumentation();
+    })
+    .WithTracing(tracing =>
+    {
+        tracing.AddAspNetCoreInstrumentation();
+        tracing.AddHttpClientInstrumentation();
+        tracing.AddOtlpExporter();
+    });
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
-    {
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
+              .AllowAnyHeader());
 });
 
 var app = builder.Build();
+var bootTime = DateTimeOffset.UtcNow;
 
-// Apply migrations automatically
 using (var scope = app.Services.CreateScope())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
-    dbContext.Database.Migrate();
+    var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    var dbContext = services.GetRequiredService<BillingDbContext>();
+
+    int retries = 5;
+    while (retries > 0)
+    {
+        try
+        {
+            logger.LogInformation("Attempting to connect and apply database migrations...");
+            dbContext.Database.Migrate();
+            logger.LogInformation("Database migrations applied successfully.");
+            break;
+        }
+        catch (Exception ex)
+        {
+            retries--;
+            if (retries == 0)
+            {
+                logger.LogError(ex, "Failed to apply migrations after multiple attempts. Terminating.");
+                throw;
+            }
+
+            logger.LogWarning(ex, "Database not ready. Retrying in 2 seconds... ({Retries} attempts left)", retries);
+            Thread.Sleep(TimeSpan.FromSeconds(2));
+        }
+    }
 }
 
-// Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+app.UseSerilogRequestLogging();
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
+app.MapDefaultHealthEndpoints(serviceName, apiVersion, bootTime);
 
 app.Run();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { ChangeEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { createApiClient } from '@/services/api';
@@ -20,9 +20,10 @@ export default function NewDoctorPage() {
     isAvailable: true
   });
 
-  const handleChange = (e: any) => {
-    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-    setFormData({ ...formData, [e.target.name]: value });
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { name, type, value, checked } = event.target;
+    const nextValue = type === 'checkbox' ? checked : value;
+    setFormData({ ...formData, [name]: nextValue });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

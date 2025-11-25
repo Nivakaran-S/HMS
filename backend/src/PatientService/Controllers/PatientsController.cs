@@ -7,7 +7,7 @@ namespace PatientService.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "admin,reception")]
 public class PatientsController : ControllerBase
 {
     private readonly IPatientService _patientService;
