@@ -7,7 +7,11 @@ interface ProtectedRouteProps {
   children: ReactNode;
 }
 
-export default function ProtectedRoute({ roles, fallback, children }: ProtectedRouteProps) {
+export default function ProtectedRoute({
+  roles,
+  fallback,
+  children,
+}: ProtectedRouteProps) {
   const { isAuthenticated, userProfile } = useAuth();
 
   if (!isAuthenticated) {
@@ -15,14 +19,16 @@ export default function ProtectedRoute({ roles, fallback, children }: ProtectedR
   }
 
   if (roles && roles.length > 0) {
-    const userRoles = userProfile?.realmAccess?.roles ?? [];
+    // CORRECT: Use realm_access (with underscore)
+    const userRoles = userProfile?.realm_access?.roles ?? [];
     const hasRole = roles.some((role) => userRoles.includes(role));
-
+  
     if (!hasRole) {
-      return fallback ?? <p className="text-red-600">You do not have access to view this section.</p>;
+      return fallback ?? (
+        <p className="text-red-600">You do not have access to view this section.</p>
+      );
     }
   }
 
   return <>{children}</>;
 }
-

@@ -3,6 +3,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import Keycloak from 'keycloak-js';
 
+// Correct Keycloak field name: realm_access (underscore!)
+export interface ExtendedKeycloakProfile extends Keycloak.KeycloakProfile {
+  realm_access?: {
+    roles: string[];
+  };
+}
+
 const keycloak = new Keycloak({
   url: process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'http://localhost:8080',
   realm: process.env.NEXT_PUBLIC_KEYCLOAK_REALM || 'hospital',
@@ -12,7 +19,7 @@ const keycloak = new Keycloak({
 interface AuthContextType {
   isAuthenticated: boolean;
   token?: string;
-  userProfile: Keycloak.KeycloakProfile | null;
+  userProfile: ExtendedKeycloakProfile | null;
   logout: () => void;
 }
 
@@ -26,72 +33,57 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [token, setToken] = useState<string | undefined>(undefined);
-  const [userProfile, setUserProfile] = useState<Keycloak.KeycloakProfile | null>(null);
+  const [token, setToken] = useState<string | undefined>();
+  const [userProfile, setUserProfile] = useState<ExtendedKeycloakProfile | null>(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
+    if (typeof window === 'undefined') return;
 
-    const init = async () => {
-      try {
-        const authenticated = await keycloak.init({
-          onLoad: 'login-required',
-          checkLoginIframe: false,
-          pkceMethod: 'S256',
-        });
-
+    keycloak
+      .init({
+        onLoad: 'login-required',
+        checkLoginIframe: false,
+        pkceMethod: 'S256',
+      })
+      .then((authenticated) => {
         setIsAuthenticated(authenticated);
         setToken(keycloak.token);
 
         if (authenticated) {
-          const profile = await keycloak.loadUserProfile();
-          setUserProfile(profile);
+          return keycloak.loadUserProfile();
         }
-
-        setIsInitialized(true);
-      } catch (error) {
+      })
+      .then((profile) => {
+        if (profile) {
+          setUserProfile(profile as ExtendedKeycloakProfile);
+        }
+      })
+      .catch((error) => {
         console.error('Keycloak init failed', error);
+      })
+      .finally(() => {
         setIsInitialized(true);
-      }
-    };
+      });
 
-    init();
-
-    const refreshInterval = setInterval(async () => {
-      try {
-        const refreshed = await keycloak.updateToken(60);
-        if (refreshed) {
-          setToken(keycloak.token);
-        }
-      } catch (error) {
-        console.error('Failed to refresh token', error);
-      }
+    const interval = setInterval(() => {
+      keycloak.updateToken(60).catch(() => {
+        console.error('Failed to refresh token');
+      });
     }, 30_000);
 
-    return () => {
-      clearInterval(refreshInterval);
-    };
+    return () => clearInterval(interval);
   }, []);
 
-  const logout = () => {
-    keycloak.logout();
-  };
+  const logout = () => keycloak.logout();
 
   const value = useMemo(
-    () => ({
-      isAuthenticated,
-      token,
-      userProfile,
-      logout,
-    }),
-    [isAuthenticated, token, userProfile],
+    () => ({ isAuthenticated, token, userProfile, logout }),
+    [isAuthenticated, token, userProfile]
   );
 
   if (!isInitialized) {
     return (
-      <div className="flex h-screen items-center justify-center text-black">
+      <div className="flex h-screen items-center justify-center">
         Loading authentication...
       </div>
     );
